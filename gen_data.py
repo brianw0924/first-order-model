@@ -10,7 +10,7 @@ import numpy as np
 import subprocess
 import multiprocessing
 from tqdm import tqdm
-from multiprocessing.dummy import Pool
+from multiprocessing import Pool
 from functools import partial
 
 TOTAL_ID = 6112
@@ -23,7 +23,7 @@ def get_args():
     parser.add_argument("--videos_per_driving_id", type=int, default=10)
     parser.add_argument("--num_source_id", type=int, default=300)
     parser.add_argument("--images_per_source_id", type=int, default=1, help="At most") # lowest priority
-    parser.add_argument("--seed", type=int, default=7414)
+    parser.add_argument("--seed", type=int, default=2023)
     parser.add_argument("--threads", type=int, default=3)
     args = parser.parse_args()
     assert args.num_driving_id + args.num_source_id <= TOTAL_ID
@@ -36,7 +36,7 @@ def get_args():
 
 
 def run(driving_id: str, driving_videos: Dict[str, Dict], source_videos: Dict[str, Dict], idx=0):
-    tqdm.write(driving_id)
+    tqdm.write(f"Start: {driving_id}")
     if not os.path.exists(os.path.join(args.save_dir, "syn", f"driving_{driving_id}")):
         os.mkdir(os.path.join(args.save_dir, "syn", f"driving_{driving_id}"))
 
@@ -50,7 +50,7 @@ def run(driving_id: str, driving_videos: Dict[str, Dict], source_videos: Dict[st
         
     for driving_video_id in driving_video_ids:
         driving_video_path = random.choice(driving_videos[driving_id][driving_video_id])
-        for source_id in tqdm(source_videos.keys()):
+        for source_id in source_videos.keys():
             '''
             Sample {args.images_per_source_id} videos
             '''
@@ -88,10 +88,12 @@ def run(driving_id: str, driving_videos: Dict[str, Dict], source_videos: Dict[st
                 with open(os.path.join(args.save_dir, "meta", f"{driving_id}_driving_videos.txt"), 'a') as f:
                     f.write(f"{driving_id},{driving_video_id},{os.path.basename(driving_video_path)},{source_id},{source_video_id},{os.path.basename(source_video_path)}\n")
 
-
+    return driving_id, idx
 
 def gen_data(args):
-        ids = os.listdir(args.data_dir)
+        with open("filtered_id.txt") as f:
+            ids = [_id.strip() for _id in f.readlines()]
+
         selected_ids = random.sample(ids, k=(args.num_driving_id + args.num_source_id))
         driving_ids, source_ids = selected_ids[:args.num_driving_id], selected_ids[args.num_driving_id:]
         
@@ -109,14 +111,20 @@ def gen_data(args):
                 if len(os.listdir(os.path.join(args.data_dir, source_id, video_id))) > 0:
                     source_videos[source_id][video_id] = glob.glob(os.path.join(args.data_dir, source_id, video_id, "*"))
 
-        with Pool(args.threads) as pool:
-            pool.map(
-                partial(run, driving_videos=driving_videos, source_videos=source_videos),
-                driving_videos.keys()) # Calls run(i) for each element i in range(5)
-            pool.close()
-            pool.join()
+        with open(os.path.join(args.save_dir, f"done_driving_video_id.txt"), 'w') as f:
+            f.write("done_driving_video_id,video_count\n")
+
+        pool = Pool(processes=args.threads)
+        for driving_id, idx in tqdm(pool.imap_unordered(
+            partial(run, driving_videos=driving_videos, source_videos=source_videos),
+            driving_videos.keys()), total=len(driving_videos)): # Calls run(i) for each element i in range(5)
+            tqdm.write(f"Done: {driving_id} | Total videos: {idx}")
+            with open(os.path.join(args.save_dir, f"done_driving_video_id.txt"), 'a') as f:
+                f.write(f"{driving_id},{idx}\n")
+        pool.close()
+        pool.join()
 
 if __name__ == "__main__":
-        multiprocessing.set_start_method('spawn', force=True)
+        # multiprocessing.set_start_method('spawn', force=True)
         args = get_args()
         gen_data(args)
