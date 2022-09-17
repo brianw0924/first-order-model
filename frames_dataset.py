@@ -63,29 +63,35 @@ class FramesDataset(Dataset):
     def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
                  random_seed=0, pairs_list=None, augmentation_params=None):
         self.root_dir = root_dir
-        self.videos = os.listdir(root_dir)
+        # self.videos = os.listdir(root_dir)
+        self.videos = []
+        with open("video_count.txt") as f:
+            next(f)
+            for line in f.readlines()[:2000]:
+                self.videos.append(line.strip().split(',')[0])
+
         self.frame_shape = tuple(frame_shape)
         self.pairs_list = pairs_list
         self.id_sampling = id_sampling
-        if os.path.exists(os.path.join(root_dir, 'train')):
-            assert os.path.exists(os.path.join(root_dir, 'test'))
-            print("Use predefined train-test split.")
-            # if id_sampling:
-            #     train_videos = {os.path.basename(video).split('#')[0] for video in
-            #                     os.listdir(os.path.join(root_dir, 'train'))}
-            #     train_videos = list(train_videos)
-            # else:
-            train_videos = os.listdir(os.path.join(root_dir, 'train'))
-            test_videos = os.listdir(os.path.join(root_dir, 'test'))
-            self.root_dir = os.path.join(self.root_dir, 'train' if is_train else 'test')
-        else:
-            print("Use random train-test split.")
-            train_videos, test_videos = train_test_split(self.videos, random_state=random_seed, test_size=0.2)
+        # if os.path.exists(os.path.join(root_dir, 'train')):
+        #     assert os.path.exists(os.path.join(root_dir, 'test'))
+        #     print("Use predefined train-test split.")
+        #     # if id_sampling:
+        #     #     train_videos = {os.path.basename(video).split('#')[0] for video in
+        #     #                     os.listdir(os.path.join(root_dir, 'train'))}
+        #     #     train_videos = list(train_videos)
+        #     # else:
+        #     train_videos = os.listdir(os.path.join(root_dir, 'train'))
+        #     test_videos = os.listdir(os.path.join(root_dir, 'test'))
+        #     self.root_dir = os.path.join(self.root_dir, 'train' if is_train else 'test')
+        # else:
+        #     print("Use random train-test split.")
+        #     train_videos, test_videos = train_test_split(self.videos, random_state=random_seed, test_size=0.2)
 
-        if is_train:
-            self.videos = train_videos
-        else:
-            self.videos = test_videos
+        # if is_train:
+        #     self.videos = train_videos
+        # else:
+        #     self.videos = test_videos
 
         self.is_train = is_train
 
@@ -100,8 +106,12 @@ class FramesDataset(Dataset):
     def __getitem__(self, idx):
         if self.is_train and self.id_sampling:
             name = self.videos[idx]
-            video_id = np.random.choice(os.listdir(os.path.join(self.root_dir, name)))
-            path = np.random.choice(glob.glob(os.path.join(self.root_dir, name, video_id, '*.mp4')))
+            videos = [
+                v
+                for vid in glob.glob(os.path.join(self.root_dir, name, "*"))
+                for v in glob.glob(os.path.join(vid, "*"))
+                ]
+            path = np.random.choice(videos)
             # path = np.random.choice(glob.glob(os.path.join(self.root_dir, name + '*.mp4')))
         else:
             name = self.videos[idx]
